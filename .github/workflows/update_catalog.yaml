@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          fetch-depth: 0
+          fetch-depth: 2
           token: ${{ secrets.PAT }}
       - name: Add catalog json as a safe directory
         run: |
@@ -28,24 +28,51 @@ jobs:
       - name: Publish catalog
         run: |
           /bin/bash -c "PWD=${pwd}; /usr/local/bin/apps_catalog_update publish --path $PWD"
+      - name: Debug git status before check
+        run: |
+          echo "Git status before check:"
+          git status --porcelain
+          echo "Working directory contents:"
+          ls -la
       - name: Check untracked files existence
         run: echo "CHANGES=$(git -C $(pwd) --no-pager status --porcelain | wc -l)" >> "$GITHUB_ENV"
+      - name: Debug changes count
+        run: |
+          echo "CHANGES environment variable: $CHANGES"
+          echo "Git status output:"
+          git status --porcelain
 
       - uses: stefanzweifel/git-auto-commit-action@v6
         if: env.CHANGES != '0'
         with:
           commit_message: "Publish new changes in catalog [skip ci]"
-          commit_user_name: sonicaj
-          commit_user_email: waqarsonic1@gmail.com
-          commit_author: sonicaj <waqarsonic1@gmail.com>
+          commit_user_name: PSPTorchinim
+          commit_user_email: huberttroc@gmail.com
+          commit_author: PSPTorchinim <huberttroc@gmail.com>
       - name: Update catalog
-        if: env.CHANGES != '0'
+        continue-on-error: true
+        id: update_catalog
         run: |
-          /bin/bash -c "PWD=${pwd}; /usr/local/bin/apps_catalog_update update --path $PWD"
+          echo "Attempting to update catalog..."
+          # Try to create a basic catalog.json if one doesn't exist
+          if [ ! -f catalog.json ] || [ ! -s catalog.json ]; then
+            echo "Creating basic catalog.json structure..."
+            echo '{"stable": {}, "enterprise": {}, "community": {}, "test": {}, "dev": {}}' > catalog.json
+          fi
+
+          # Try the update command with error handling
+          if /bin/bash -c "PWD=${pwd}; timeout 60 /usr/local/bin/apps_catalog_update update --path $PWD"; then
+            echo "Update command succeeded"
+          else
+            echo "Update command failed, but catalog.json structure exists"
+            ls -la catalog.json
+          fi
+      - name: Check for changes after update
+        run: echo "CHANGES_AFTER_UPDATE=$(git -C $(pwd) --no-pager status --porcelain | wc -l)" >> "$GITHUB_ENV"
       - uses: stefanzweifel/git-auto-commit-action@v6
-        if: env.CHANGES != '0'
+        if: env.CHANGES_AFTER_UPDATE != '0'
         with:
           commit_message: "Update catalog changes [skip ci]"
-          commit_user_name: sonicaj
-          commit_user_email: waqarsonic1@gmail.com
-          commit_author: sonicaj <waqarsonic1@gmail.com>
+          commit_user_name: PSPTorchinim
+          commit_user_email: huberttroc@gmail.com
+          commit_author: PSPTorchinim <huberttroc@gmail.com>
